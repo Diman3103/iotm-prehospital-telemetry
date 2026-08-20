@@ -41,7 +41,7 @@ La plataforma se organiza conceptualmente en tres capas:
 
 ```text
 ┌──────────────────────────────────────────────┐
-│              ADQUISICIÓN                    │
+│              ADQUISICIÓN                     │
 │                                              │
 │  AD8232 ─────┐                               │
 │  MAX30100 ───┼──> Raspberry Pi 5             │
@@ -51,21 +51,21 @@ La plataforma se organiza conceptualmente en tres capas:
                           │
                           ▼
 ┌──────────────────────────────────────────────┐
-│        PROCESAMIENTO Y PERSISTENCIA         │
+│        PROCESAMIENTO Y PERSISTENCIA          │
 │                                              │
-│  Validación → Normalización → SQLite        │
+│  Validación → Normalización → SQLite         │
 │                         │                    │
-│                  Store & Forward              │
+│                  Store & Forward             │
 └─────────────────────────┼────────────────────┘
                           │
                           ▼
 ┌──────────────────────────────────────────────┐
-│              ENTREGA Y VISUALIZACIÓN        │
+│           ENTREGA Y VISUALIZACIÓN            │
 │                                              │
-│             FastAPI / REST API              │
+│              FastAPI / REST API              │
 │                     │                        │
 │                     ▼                        │
-│              Dashboard Web                  │
+│               Dashboard Web                  │
 └──────────────────────────────────────────────┘
 ```
 ---
