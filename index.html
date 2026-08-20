@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitor de Telemetría Pro - Tesis 107</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .btn-reset { background: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        .btn-reset:hover { background: #cc0000; }
+        .btn-logout { background: #555; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        .btn-logout:hover { background: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: radial-gradient(circle, #1a2a3a 0%, #0a0f14 100%); color: white; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; overflow-x: hidden; }
+        h1 { text-shadow: 2px 2px 4px rgba(0,0,0,0.5); color: #00ffcc; letter-spacing: 2px; margin-bottom: 10px; }
+        .chart-title { font-size: 1.4rem; font-weight: 900; color: white; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; margin-bottom: 10px; text-align: center; text-transform: uppercase; }
+        .grid-numeros { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; width: 95%; margin-bottom: 20px; }
+        .card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); padding: 15px; border-radius: 15px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .card h2 { margin: 0; font-size: 0.85rem; color: #00ffcc; text-transform: uppercase; opacity: 0.8; }
+        .card .valor { font-size: 2.8rem; font-weight: bold; margin: 5px 0; }
+        .heart { display: inline-block; color: #ff4444; font-size: 1.8rem; animation: beat 1s infinite; filter: drop-shadow(0 0 5px #ff4444); }
+        @keyframes beat { 0% { transform: scale(1); } 15% { transform: scale(1.3); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 60% { transform: scale(1); } }
+        .grid-graficos { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 95%; }
+        .chart-container { background: rgba(0, 0, 0, 0.4); padding: 20px; border-radius: 20px; border: 1px solid #333; height: 280px; }
+        #alerta-desconexion { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(180, 0, 0, 0.95); z-index: 9999; color: white; text-align: center; flex-direction: column; justify-content: center; align-items: center; }
+        #alerta-desconexion h1 { font-size: 4rem; color: white; text-shadow: 4px 4px #000; }
+        #alerta-desconexion p { font-size: 1.8rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="alerta-desconexion">
+        <h1>⚠️ SENSORES FUERA DE SERVICIO</h1>
+        <p>REVISAR SWITCH Y CONEXIONES FÍSICAS DE LA RASPBERRY PI</p>
+    </div>
+    <h1>MONITOR DE ATENCIÓN TELEMÉTRICA 107</h1>
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <button class="btn-reset" onclick="confirmarReset()">🔄 REINICIAR ATENCIÓN</button>
+        <button class="btn-logout" onclick="cerrarSesion()">🔒 CERRAR SESIÓN</button>
+    </div>
+    <div class="grid-numeros">
+        <div class="card"><h2>BPM <span id="heart-icon" class="heart">❤️</span></h2><div class="valor" id="num-bpm">--</div></div>
+        <div class="card"><h2>SpO2</h2><div class="valor" id="num-spo2" style="color: #4444ff;">--</div></div>
+        <div class="card"><h2>Temp Actual</h2><div class="valor" id="num-temp" style="color: #ffcc00;">--</div></div>
+        <div class="card" style="border-bottom: 4px solid #ff4444;"><h2>Máx Temp</h2><div class="valor" id="temp-max" style="font-size: 1.8rem;">--</div></div>
+        <div class="card" style="border-bottom: 4px solid #44ff44;"><h2>Mín Temp</h2><div class="valor" id="temp-min" style="font-size: 1.8rem;">--</div></div>
+    </div>
+    <div class="grid-graficos">
+        <div class="chart-container"><div class="chart-title">Frecuencia Cardíaca (BPM)</div><canvas id="chartBPM"></canvas></div>
+        <div class="chart-container"><div class="chart-title">Saturación Oxígeno (%)</div><canvas id="chartSPO2"></canvas></div>
+        <div class="chart-container"><div class="chart-title">Temperatura Corporal (°C)</div><canvas id="chartTemp"></canvas></div>
+        <div class="chart-container"><div class="chart-title">Electrocardiograma (V)</div><canvas id="chartECG"></canvas></div>
+    </div>
+    <script>
+        const API_URL = window.location.origin;
+
+        function crearConfig(label, color, min, max) {
+            return {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: color, tension: 0.4, fill: false, pointRadius: 0, borderWidth: 3 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: '#222' }, ticks: { color: '#aaa' }, min: min, max: max } }, animation: false }
+            };
+        }
+
+        const charts = {
+            bpm: new Chart(document.getElementById('chartBPM'), crearConfig('BPM', '#ff4444', 40, 160)),
+            spo2: new Chart(document.getElementById('chartSPO2'), crearConfig('SpO2', '#4444ff', 80, 100)),
+            temp: new Chart(document.getElementById('chartTemp'), crearConfig('Temp', '#ffcc00', 30, 42)),
+            ecg: new Chart(document.getElementById('chartECG'), crearConfig('ECG', '#00ff00', 0, 3.3))
+        };
+
+        async function actualizar() {
+            try {
+                const resRT = await fetch(`${API_URL}/realtime`);
+                if (resRT.status === 401) return; 
+
+                const dataRT = await resRT.json();
+                if (dataRT.sensores_online === false) {
+                    document.getElementById('alerta-desconexion').style.display = 'flex';
+                } else {
+                    document.getElementById('alerta-desconexion').style.display = 'none';
+                    document.getElementById('num-bpm').innerText = dataRT.bpm;
+                    document.getElementById('num-spo2').innerText = dataRT.spo2 + "%";
+                    document.getElementById('num-temp').innerText = (dataRT.temperatura || 0).toFixed(1) + "°";
+                    const duration = 60 / (dataRT.bpm || 70);
+                    document.getElementById('heart-icon').style.animationDuration = `${duration}s`;
+                }
+
+                const resStats = await fetch(`${API_URL}/estadisticas`);
+                const stats = await resStats.json();
+                document.getElementById('temp-max').innerText = stats.temp_max + "°";
+                document.getElementById('temp-min').innerText = stats.temp_min + "°";
+
+                const resHist = await fetch(`${API_URL}/historial-grafico`);
+                const dataHist = await resHist.json();
+                const labels = dataHist.map(d => d.timestamp);
+                charts.bpm.data.labels = labels; charts.bpm.data.datasets[0].data = dataHist.map(d => d.bpm);
+                charts.spo2.data.labels = labels; charts.spo2.data.datasets[0].data = dataHist.map(d => d.spo2);
+                charts.temp.data.labels = labels; charts.temp.data.datasets[0].data = dataHist.map(d => d.temperatura);
+                charts.ecg.data.labels = labels; charts.ecg.data.datasets[0].data = dataHist.map(d => d.ecg.voltaje_filtrado);
+                Object.values(charts).forEach(c => c.update());
+            } catch (e) { console.log("Error..."); }
+        }
+
+        setInterval(actualizar, 1000);
+
+        async function confirmarReset() {
+            if (confirm("¿Estás seguro de que deseas borrar todo el historial?")) {
+                try {
+                    const response = await fetch(`${API_URL}/reset`, { method: 'POST' });
+                    if (response.status === 200) { alert("Atención reiniciada."); location.reload(); }
+                } catch (e) { alert("Error..."); }
+            }
+        }
+
+        function cerrarSesion() {
+            // MÉTODO ROBUSTO: Enviamos una petición con credenciales erróneas a la ruta /logout
+            const xhttp = new XMLHttpRequest();
+            xhttp.open("GET", API_URL + "/logout", true, "usuario_falso", "password_falso");
+            xhttp.onreadystatechange = function() {
+                if (xhttp.readyState == 4) {
+                    // Una vez que el navegador procesa el error 401, redirigimos a la raíz
+                    // Esto forzará la aparición del cuadro de login de nuevo.
+                    window.location.href = API_URL;
+                }
+            };
+            xhttp.send();
+        }
+    </script>
+</body>
+</html>
